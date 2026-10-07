@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Margonem – Dodatki (menedżer)
 // @namespace    majcinai
-// @version      0.2.2
+// @version      0.2.3
 // @description  Menedżer dodatków Margonem: włączanie i wyłączanie dodatków z okna Konfiguracji w grze. Dodatki wydawane są po kluczu dostępu z prywatnego serwera i aktualizują się same.
 // @author       majcinai
 // @homepageURL  https://github.com/majcinai/margo-addons
@@ -27,7 +27,7 @@
   if (W.top !== W.self) return;
   if (W.MargoAddons && W.MargoAddons.__manager) return;
 
-  const MANAGER_VERSION = '0.2.2';
+  const MANAGER_VERSION = '0.2.3';
 
   // ADRES SERWERA – ustaw po wdrożeniu (np. https://majcin-addons.twojanazwa.workers.dev)
   const SERVER_URL = 'https://margo-dodatki.majcin94.workers.dev';
@@ -213,43 +213,43 @@
 
   /* --------------------------- interfejs --------------------------- */
   const CSS = `
-  .mm-addons-btn.button{position:absolute!important;left:50%;top:3px;transform:translateX(-50%);width:84px;min-width:0!important;margin:0!important}
-  .mm-wnd{position:relative;width:390px;min-height:220px;color:#e6d3a3;font-size:12px}
-  .mm-wnd>.graphic-background{position:absolute;inset:0;z-index:0}
-  .mm-wnd .mm-inner{position:relative;z-index:1;padding:6px 6px 44px}
-  .mm-wnd h2{position:relative;margin:4px 0 6px;height:24px;line-height:24px;text-align:left;padding-left:10px;font-size:12px;color:#e6d3a3}
-  .mm-wnd h2>div{position:absolute;inset:0;z-index:-1}
-  .mm-keybar{display:flex;gap:6px;align-items:center;margin:0 2px 8px;padding:6px;background:rgba(0,0,0,.28);border:1px solid rgba(230,211,163,.12);border-radius:4px}
-  .mm-eye{flex:none;width:28px;height:26px;padding:0;cursor:pointer;background:#0e0b07;color:#e6d3a3;border:1px solid #3a2f1c;border-radius:4px;font-size:14px;line-height:1;opacity:.6}
-  .mm-eye:hover,.mm-eye.on{opacity:1;border-color:#8a6d2f}
-  .mm-keybar input{flex:1;min-width:0;background:#0e0b07;color:#e6d3a3;border:1px solid #3a2f1c;border-radius:4px;padding:5px 7px;font-family:ui-monospace,monospace;font-size:11px}
-  .mm-msg{margin:0 2px 8px;padding:7px 9px;border-radius:4px;background:rgba(90,20,20,.35);border:1px solid #6e2e2a;color:#ffbdb5;font-size:11px}
-  .mm-scroll,.mm-scroll .mm-list{max-height:340px}
-  .mm-scroll{position:relative}
-  .mm-scroll .mm-list{padding-right:10px}
-  .mm-item{padding:6px 8px 7px;margin:0 2px 4px;border-radius:3px;background:rgba(0,0,0,.28);border:1px solid rgba(230,211,163,.10)}
-  .mm-item.on{border-color:rgba(120,200,90,.35)}
-  .mm-top{display:flex;align-items:center;gap:6px}
-  .mm-top .c-checkbox{flex:1;min-width:0}
-  .mm-top .c-checkbox__label{font-weight:bold;color:#f0e0b0!important}
-  .mm-ver{color:#9d8f6d;font-size:11px;white-space:nowrap}
-  .mm-link{color:#9d8f6d;text-decoration:none;font-size:13px;padding:0 2px}.mm-link:hover{color:#f0e0b0}
-  .mm-desc{color:#b9a980;margin:3px 0 0 26px;line-height:1.35}
-  .mm-status{margin:4px 0 0 26px;font-size:11px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-  .mm-dot{width:7px;height:7px;border-radius:50%;background:#777;display:inline-block;flex:none}
-  .mm-s-running .mm-dot{background:#6fd04a;box-shadow:0 0 5px #6fd04a}.mm-s-running{color:#9fe07f}
-  .mm-s-pending .mm-dot,.mm-s-loading .mm-dot{background:#e0c14a}.mm-s-pending,.mm-s-loading{color:#e0c14a}
-  .mm-s-error .mm-dot{background:#e0564a}.mm-s-error{color:#ff8a7a}
-  .mm-s-off{color:#8a7f66}
-  .mm-upd{color:#7fc8ff}
-  .mm-empty{padding:20px;text-align:center;color:#9d8f6d}
-  .mm-bottom{position:absolute;left:0;right:0;bottom:6px;display:flex;justify-content:center;gap:8px;z-index:1}
-  .mm-bottom .button{position:relative}
-  .mm-reload{display:none}.mm-wnd.need-reload .mm-reload{display:block}
-  .mm-flash{position:absolute;left:0;right:0;bottom:40px;text-align:center;color:#9fe07f;font-size:11px;opacity:0;transition:opacity .3s;z-index:1;pointer-events:none}
-  .mm-flash.show{opacity:1}
+  .mjd-addons-btn.button{position:absolute!important;left:50%;top:3px;transform:translateX(-50%);width:84px;min-width:0!important;margin:0!important}
+  .mjd-wnd{position:relative;width:390px;min-height:220px;color:#e6d3a3;font-size:12px}
+  .mjd-wnd>.graphic-background{position:absolute;inset:0;z-index:0}
+  .mjd-wnd .mjd-inner{position:relative;z-index:1;padding:6px 6px 44px}
+  .mjd-wnd h2{position:relative;margin:4px 0 6px;height:24px;line-height:24px;text-align:left;padding-left:10px;font-size:12px;color:#e6d3a3}
+  .mjd-wnd h2>div{position:absolute;inset:0;z-index:-1}
+  .mjd-keybar{display:flex;gap:6px;align-items:center;margin:0 2px 8px;padding:6px;background:rgba(0,0,0,.28);border:1px solid rgba(230,211,163,.12);border-radius:4px}
+  .mjd-eye{flex:none;width:28px;height:26px;padding:0;cursor:pointer;background:#0e0b07;color:#e6d3a3;border:1px solid #3a2f1c;border-radius:4px;font-size:14px;line-height:1;opacity:.6}
+  .mjd-eye:hover,.mjd-eye.on{opacity:1;border-color:#8a6d2f}
+  .mjd-keybar input{flex:1;min-width:0;background:#0e0b07;color:#e6d3a3;border:1px solid #3a2f1c;border-radius:4px;padding:5px 7px;font-family:ui-monospace,monospace;font-size:11px}
+  .mjd-msg{margin:0 2px 8px;padding:7px 9px;border-radius:4px;background:rgba(90,20,20,.35);border:1px solid #6e2e2a;color:#ffbdb5;font-size:11px}
+  .mjd-scroll,.mjd-scroll .mjd-list{max-height:340px}
+  .mjd-scroll{position:relative}
+  .mjd-scroll .mjd-list{padding-right:10px}
+  .mjd-item{padding:6px 8px 7px;margin:0 2px 4px;border-radius:3px;background:rgba(0,0,0,.28);border:1px solid rgba(230,211,163,.10)}
+  .mjd-item.on{border-color:rgba(120,200,90,.35)}
+  .mjd-top{display:flex;align-items:center;gap:6px}
+  .mjd-top .c-checkbox{flex:1;min-width:0}
+  .mjd-top .c-checkbox__label{font-weight:bold;color:#f0e0b0!important}
+  .mjd-ver{color:#9d8f6d;font-size:11px;white-space:nowrap}
+  .mjd-link{color:#9d8f6d;text-decoration:none;font-size:13px;padding:0 2px}.mjd-link:hover{color:#f0e0b0}
+  .mjd-desc{color:#b9a980;margin:3px 0 0 26px;line-height:1.35}
+  .mjd-status{margin:4px 0 0 26px;font-size:11px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .mjd-dot{width:7px;height:7px;border-radius:50%;background:#777;display:inline-block;flex:none}
+  .mjd-s-running .mjd-dot{background:#6fd04a;box-shadow:0 0 5px #6fd04a}.mjd-s-running{color:#9fe07f}
+  .mjd-s-pending .mjd-dot,.mjd-s-loading .mjd-dot{background:#e0c14a}.mjd-s-pending,.mjd-s-loading{color:#e0c14a}
+  .mjd-s-error .mjd-dot{background:#e0564a}.mjd-s-error{color:#ff8a7a}
+  .mjd-s-off{color:#8a7f66}
+  .mjd-upd{color:#7fc8ff}
+  .mjd-empty{padding:20px;text-align:center;color:#9d8f6d}
+  .mjd-bottom{position:absolute;left:0;right:0;bottom:6px;display:flex;justify-content:center;gap:8px;z-index:1}
+  .mjd-bottom .button{position:relative}
+  .mjd-reload{display:none}.mjd-wnd.need-reload .mjd-reload{display:block}
+  .mjd-flash{position:absolute;left:0;right:0;bottom:40px;text-align:center;color:#9fe07f;font-size:11px;opacity:0;transition:opacity .3s;z-index:1;pointer-events:none}
+  .mjd-flash.show{opacity:1}
   `;
-  function addCss() { const s = document.createElement('style'); s.id = 'mm-addons-css'; s.textContent = CSS; (document.head || document.documentElement).appendChild(s); }
+  function addCss() { const s = document.createElement('style'); s.id = 'mjd-addons-css'; s.textContent = CSS; (document.head || document.documentElement).appendChild(s); }
 
   const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -266,23 +266,23 @@
     open() {
       const E = W.Engine, $ = W.$; if (!E || !E.windowManager || !$) return;
       if (this.wnd) { this.wnd.show(); this.toTop(); this.refresh(); return; }
-      const root = el('div', 'mm-wnd');
+      const root = el('div', 'mjd-wnd');
       root.innerHTML =
         '<div class="graphic-background interface-element-middle-1-background"></div>' +
-        '<div class="mm-inner">' +
+        '<div class="mjd-inner">' +
           '<h2><div class="interface-element-header-1-background-stretch"></div><span>Twoje dodatki</span></h2>' +
-          '<div class="mm-keybar"><input type="password" class="mm-key" placeholder="Klucz dostępu (MA-XXXX-XXXX-XXXX)" spellcheck="false" autocomplete="off" data-lpignore="true"><button type="button" class="mm-eye" title="Pokaż / ukryj klucz" aria-label="Pokaż / ukryj klucz">&#128065;</button></div>' +
-          '<div class="mm-msg" style="display:none"></div>' +
-          '<div class="scroll-wrapper mm-scroll"><div class="scroll-pane mm-list"></div></div>' +
+          '<div class="mjd-keybar"><input type="password" class="mjd-key" placeholder="Klucz dostępu (MA-XXXX-XXXX-XXXX)" spellcheck="false" autocomplete="off" data-lpignore="true"><button type="button" class="mjd-eye" title="Pokaż / ukryj klucz" aria-label="Pokaż / ukryj klucz">&#128065;</button></div>' +
+          '<div class="mjd-msg" style="display:none"></div>' +
+          '<div class="scroll-wrapper mjd-scroll"><div class="scroll-pane mjd-list"></div></div>' +
         '</div>' +
-        '<div class="mm-flash"></div>' +
-        '<div class="mm-bottom"></div>';
-      const bottom = root.querySelector('.mm-bottom');
-      const bReload = gmeBtn('Odśwież grę', 'mm-reload');
+        '<div class="mjd-flash"></div>' +
+        '<div class="mjd-bottom"></div>';
+      const bottom = root.querySelector('.mjd-bottom');
+      const bReload = gmeBtn('Odśwież grę', 'mjd-reload');
       bReload.addEventListener('click', () => location.reload());
       bottom.append(bReload);
 
-      const keyInput = root.querySelector('.mm-key'); keyInput.value = accessKey;
+      const keyInput = root.querySelector('.mjd-key'); keyInput.value = accessKey;
       const KEY_RE = /^MA-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
       const maybeSave = force => {
         const v = (keyInput.value || '').trim().toUpperCase();
@@ -292,14 +292,14 @@
       keyInput.addEventListener('input', () => maybeSave(false));
       keyInput.addEventListener('change', () => maybeSave(true));
       keyInput.addEventListener('keydown', e => { if (e.key === 'Enter') maybeSave(true); });
-      const eye = root.querySelector('.mm-eye');
+      const eye = root.querySelector('.mjd-eye');
       eye.addEventListener('click', () => {
         const show = keyInput.type === 'password';
         keyInput.type = show ? 'text' : 'password';
         eye.classList.toggle('on', show);
       });
 
-      this.root = root; this.list = root.querySelector('.mm-list'); this.scroll = root.querySelector('.mm-scroll');
+      this.root = root; this.list = root.querySelector('.mjd-list'); this.scroll = root.querySelector('.mjd-scroll');
       this.wnd = E.windowManager.add({ content: $(root), nameWindow: 'MAJCINAI_ADDONS_MANAGER', title: 'Dodatki', onclose: () => this.wnd.hide() });
       this.wnd.addToAlertLayer(); this.wnd.center(); this.wnd.show(); this.toTop();
       try { $(this.scroll).addScrollBar({ track: true }); this.hasBar = true; } catch (e) { this.scroll.style.overflowY = 'auto'; this.list.style.overflowY = 'auto'; }
@@ -307,33 +307,33 @@
     },
     toTop() { try { this.wnd.setWndOnPeak(); } catch (e) {} },
     saveKey() {
-      const v = (this.root.querySelector('.mm-key').value || '').trim().toUpperCase();
-      accessKey = v; save(K.key, v); this.root.querySelector('.mm-key').type = 'password'; this.root.querySelector('.mm-eye').classList.remove('on'); this.flash(v ? 'Klucz zapisany – sprawdzam…' : 'Klucz usunięty');
+      const v = (this.root.querySelector('.mjd-key').value || '').trim().toUpperCase();
+      accessKey = v; save(K.key, v); this.root.querySelector('.mjd-key').type = 'password'; this.root.querySelector('.mjd-eye').classList.remove('on'); this.flash(v ? 'Klucz zapisany – sprawdzam…' : 'Klucz usunięty');
       syncWithServer();
     },
     refresh() { if (!this.list) return; clearTimeout(this._t); this._t = setTimeout(() => this.render(), 30); },
     render() {
       const list = this.list; if (!list) return;
-      const msg = this.root.querySelector('.mm-msg');
+      const msg = this.root.querySelector('.mjd-msg');
       if (serverMsg) { msg.style.display = 'block'; msg.textContent = serverMsg; } else msg.style.display = 'none';
       list.innerHTML = ''; let needReload = false;
-      if (!accessKey) { list.appendChild(el('div', 'mm-empty', 'Wpisz klucz dostępu, aby zobaczyć swoje dodatki.')); this.root.classList.remove('need-reload'); this.updBar(); return; }
-      if (!cache.addons.length) { list.appendChild(el('div', 'mm-empty', serverMsg ? 'Brak dostępnych dodatków.' : 'Ładowanie listy dodatków…')); this.root.classList.remove('need-reload'); this.updBar(); return; }
+      if (!accessKey) { list.appendChild(el('div', 'mjd-empty', 'Wpisz klucz dostępu, aby zobaczyć swoje dodatki.')); this.root.classList.remove('need-reload'); this.updBar(); return; }
+      if (!cache.addons.length) { list.appendChild(el('div', 'mjd-empty', serverMsg ? 'Brak dostępnych dodatków.' : 'Ładowanie listy dodatków…')); this.root.classList.remove('need-reload'); this.updBar(); return; }
       for (const a of cache.addons) {
         const on = !!state.enabled[a.id], r = R(a.id);
         const ver = r.runningVersion || a.version || '';
-        const item = el('div', 'mm-item' + (on ? ' on' : ''));
-        const cb = 'mm-cb-' + a.id;
+        const item = el('div', 'mjd-item' + (on ? ' on' : ''));
+        const cb = 'mjd-cb-' + a.id;
         item.innerHTML =
-          '<div class="mm-top"><div class="checkbox-custom c-checkbox"><input type="checkbox" id="' + cb + '"' + (on ? ' checked' : '') + '>' +
+          '<div class="mjd-top"><div class="checkbox-custom c-checkbox"><input type="checkbox" id="' + cb + '"' + (on ? ' checked' : '') + '>' +
           '<label for="' + cb + '" class="c-checkbox__label">' + esc(a.name || a.id) + '</label></div>' +
-          (ver ? '<span class="mm-ver">v' + esc(ver) + '</span>' : '') +
-          (a.homepage ? '<a class="mm-link" href="' + esc(a.homepage) + '" target="_blank" rel="noopener">↗</a>' : '') + '</div>' +
-          (a.description ? '<div class="mm-desc">' + esc(a.description) + '</div>' : '');
+          (ver ? '<span class="mjd-ver">v' + esc(ver) + '</span>' : '') +
+          (a.homepage ? '<a class="mjd-link" href="' + esc(a.homepage) + '" target="_blank" rel="noopener">↗</a>' : '') + '</div>' +
+          (a.description ? '<div class="mjd-desc">' + esc(a.description) + '</div>' : '');
         const s = STATUS[r.status] || STATUS.off;
-        const st = el('div', 'mm-status mm-s-' + s.c);
-        st.innerHTML = '<span class="mm-dot"></span><span>' + esc(s.t + (r.status === 'error' && r.error ? ': ' + r.error : '')) + '</span>';
-        if (r.updateReady) st.innerHTML += '<span class="mm-upd">• nowa wersja v' + esc(r.updateReady) + ' po odświeżeniu</span>';
+        const st = el('div', 'mjd-status mjd-s-' + s.c);
+        st.innerHTML = '<span class="mjd-dot"></span><span>' + esc(s.t + (r.status === 'error' && r.error ? ': ' + r.error : '')) + '</span>';
+        if (r.updateReady) st.innerHTML += '<span class="mjd-upd">• nowa wersja v' + esc(r.updateReady) + ' po odświeżeniu</span>';
         item.appendChild(st);
         if (r.status === 'pendingOff' || r.updateReady) needReload = true;
         item.querySelector('input').addEventListener('change', e => setEnabled(a.id, e.target.checked));
@@ -343,13 +343,13 @@
       this.updBar();
     },
     updBar() { if (this.hasBar) try { W.$(this.scroll).trigger('update'); } catch (e) {} },
-    flash(t) { if (!this.root) return; const f = this.root.querySelector('.mm-flash'); f.textContent = t; f.classList.add('show'); setTimeout(() => f.classList.remove('show'), 1800); },
+    flash(t) { if (!this.root) return; const f = this.root.querySelector('.mjd-flash'); f.textContent = t; f.classList.add('show'); setTimeout(() => f.classList.remove('show'), 1800); },
   };
 
   function injectButton() {
     const holder = document.querySelector('.settings-window .bottom-bar .options-config-buttons');
-    if (!holder || holder.querySelector('.mm-addons-btn')) return;
-    const b = gmeBtn('DODATKI', 'mm-addons-btn');
+    if (!holder || holder.querySelector('.mjd-addons-btn')) return;
+    const b = gmeBtn('DODATKI', 'mjd-addons-btn');
     b.addEventListener('click', e => { e.stopPropagation(); UI.open(); });
     holder.appendChild(b);
     try { W.$(b).tip('Twoje dodatki'); } catch (e) {}
