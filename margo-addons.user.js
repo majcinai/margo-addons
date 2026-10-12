@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Margonem – Dodatki (menedżer)
 // @namespace    majcinai
-// @version      0.2.3
-// @description  Menedżer dodatków Margonem: włączanie i wyłączanie dodatków z okna Konfiguracji w grze. Dodatki wydawane są po kluczu dostępu z prywatnego serwera i aktualizują się same.
+// @version      0.3.0
+// @description  Menedżer dodatków Margonem: włączanie i wyłączanie dodatków z okna Konfiguracji w grze. Dostęp sprawdzany przez oficjalne logowanie Margonem (bez kluczy); dodatki pobierane z prywatnego serwera i aktualizowane same.
 // @author       majcinai
 // @homepageURL  https://github.com/majcinai/margo-addons
 // @updateURL    https://raw.githubusercontent.com/majcinai/margo-addons/main/margo-addons.user.js
@@ -17,6 +17,7 @@
 // @grant        GM_registerMenuCommand
 // @grant        unsafeWindow
 // @connect      workers.dev
+// @connect      public-api.margonem.pl
 // @run-at       document-start
 // ==/UserScript==
 
@@ -27,7 +28,7 @@
   if (W.top !== W.self) return;
   if (W.MargoAddons && W.MargoAddons.__manager) return;
 
-  const MANAGER_VERSION = '0.2.3';
+  const MANAGER_VERSION = '0.3.0';
 
   // ADRES SERWERA – ustaw po wdrożeniu (np. https://majcin-addons.twojanazwa.workers.dev)
   const SERVER_URL = 'https://margo-dodatki.majcin94.workers.dev';
@@ -36,7 +37,6 @@
 
   /* --------------------------- pamięć --------------------------- */
   const K = {
-    key: 'mm.key',
     state: 'mm.state',
     cache: 'mm.cache',
     userLabel: 'mm.userLabel',
@@ -45,11 +45,13 @@
   const load = (k, def) => { try { const v = GM_getValue(k); return v === undefined ? def : v; } catch (e) { return def; } };
   const save = (k, v) => { try { GM_setValue(k, v); } catch (e) {} };
 
-  let accessKey = String(load(K.key, '') || '');
+  try { GM_deleteValue('mm.key'); } catch (e) {}   // stary klucz z wersji 0.2 nie jest już potrzebny
   const state = Object.assign({ enabled: {} }, load(K.state, {}));
   const saveState = () => save(K.state, state);
   let cache = load(K.cache, null) || { addons: [], at: 0 };
   let serverMsg = null;
+  // Stan logowania: checking | ok | pending | rejected | revoked | error | offline
+  const auth = { state: 'checking', uid: '', msg: '' };
 
   const rt = {};
   const R = id => (rt[id] = rt[id] || { status: 'off' });
@@ -84,20 +86,56 @@
 
   const bareCode = c => String(c || '').replace(/^\s*\/\*[^\n]*?Margonem-Dodatki[\s\S]*?\*\/\s*/, '');
 
+  const VALIDATE_URL = 'https://public-api.margonem.pl/account/validate';
+  // Oficjalne potwierdzenie konta: POST token=<wyzwanie>, z ciasteczkami gracza.
+  async function margonemProof(nonce) {
+    const body = 'token=' + encodeURIComponent(nonce);
+    const okProof = d => d && d.user_id != null && d.signatureBase64 && d.validatedString;
+    try {
+      const r = await W.fetch(VALIDATE_URL, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
+      if (r.ok) { const d = await r.json(); if (okProof(d)) return d; }
+    } catch (e) {}
+    return new Promise(res => {
+      try {
+        GM_xmlhttpRequest({
+          method: 'POST', url: VALIDATE_URL, data: body, anonymous: false, timeout: 15000,
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          onload: r => { let d = null; try { d = JSON.parse(r.responseText); } catch (e) {} res(okProof(d) ? d : null); },
+          onerror: () => res(null), ontimeout: () => res(null),
+        });
+      } catch (e) { res(null); }
+    });
+  }
+
+  let syncing = false;
   async function syncWithServer() {
-    if (!accessKey) { serverMsg = null; UI.refresh(); return; }
+    if (syncing) return; syncing = true;
+    try { await doSync(); } finally { syncing = false; UI.refresh(); }
+  }
+  function setAuth(st, msg, uid) { auth.state = st; auth.msg = msg || ''; if (uid != null && uid !== '') auth.uid = String(uid); serverMsg = (st === 'ok' || st === 'checking') ? null : (msg || null); UI.refresh(); }
+  function dropAccess() {
+    // Brak dostępu: nie uruchamiaj już dodatków z pamięci przy kolejnym wejściu.
+    for (const old of cache.addons) if (R(old.id).status === 'running') R(old.id).status = 'pendingOff';
+    cache = { addons: [], at: Date.now() }; save(K.cache, cache);
+  }
+  async function doSync() {
+    setAuth('checking');
     await waitFor(() => heroInfo().account);
     const hi = heroInfo();
+    let ch;
+    try { ch = await post('/api/challenge', {}); } catch (e) { return setAuth('offline', 'Brak połączenia z serwerem dodatków – działają dodatki zapamiętane wcześniej.'); }
+    if (ch.status !== 200 || !ch.data.nonce) return setAuth('offline', 'Serwer dodatków nie odpowiada (' + ch.status + ').');
+    const proof = await margonemProof(ch.data.nonce);
+    if (!proof) return setAuth('error', 'Nie udało się potwierdzić konta w Margonem. Upewnij się, że jesteś zalogowany na margonem.pl, i odśwież grę.');
+    auth.uid = String(proof.user_id);
     let res;
-    try { res = await post('/api/session', { key: accessKey, account: hi.account, nick: hi.nick, world: worldName(), managerVersion: MANAGER_VERSION }); }
-    catch (e) { serverMsg = null; UI.refresh(); return; }
-    if (res.status !== 200 || !res.data.ok) {
-      serverMsg = res.data && res.data.message ? res.data.message : 'Błąd serwera (' + res.status + ')';
-      UI.refresh(); return;
-    }
-    serverMsg = null;
-    save(K.userLabel, (res.data.user && res.data.user.label) || '');
-    const incoming = res.data.addons || [];
+    try { res = await post('/api/login', { nonce: ch.data.nonce, proof, nick: hi.nick, world: worldName(), managerVersion: MANAGER_VERSION }); }
+    catch (e) { return setAuth('offline', 'Brak połączenia z serwerem dodatków – działają dodatki zapamiętane wcześniej.'); }
+    const d = res.data || {};
+    if (res.status === 403 && ['pending', 'rejected', 'revoked'].includes(d.error)) { dropAccess(); return setAuth(d.error, d.message, d.uid); }
+    if (res.status !== 200 || !d.ok) return setAuth('error', d.message || ('Błąd serwera (' + res.status + ')'));
+    save(K.userLabel, (d.player && d.player.label) || '');
+    const incoming = d.addons || [];
     for (const a of incoming) {
       const old = cache.addons.find(x => x.id === a.id);
       if (old && bareCode(old.code) !== bareCode(a.code) && R(a.id).status === 'running') R(a.id).updateReady = a.version || '?';
@@ -105,8 +143,8 @@
     for (const old of cache.addons) if (!incoming.find(a => a.id === old.id) && R(old.id).status === 'running') R(old.id).status = 'pendingOff';
     cache = { addons: incoming, at: Date.now() };
     save(K.cache, cache);
+    setAuth('ok', '', d.uid);
     for (const a of incoming) if (state.enabled[a.id] && R(a.id).status === 'off') startAddon(a);
-    UI.refresh();
   }
 
   /* --------------------------- nagłówek --------------------------- */
@@ -219,10 +257,14 @@
   .mjd-wnd .mjd-inner{position:relative;z-index:1;padding:6px 6px 44px}
   .mjd-wnd h2{position:relative;margin:4px 0 6px;height:24px;line-height:24px;text-align:left;padding-left:10px;font-size:12px;color:#e6d3a3}
   .mjd-wnd h2>div{position:absolute;inset:0;z-index:-1}
-  .mjd-keybar{display:flex;gap:6px;align-items:center;margin:0 2px 8px;padding:6px;background:rgba(0,0,0,.28);border:1px solid rgba(230,211,163,.12);border-radius:4px}
-  .mjd-eye{flex:none;width:28px;height:26px;padding:0;cursor:pointer;background:#0e0b07;color:#e6d3a3;border:1px solid #3a2f1c;border-radius:4px;font-size:14px;line-height:1;opacity:.6}
-  .mjd-eye:hover,.mjd-eye.on{opacity:1;border-color:#8a6d2f}
-  .mjd-keybar input{flex:1;min-width:0;background:#0e0b07;color:#e6d3a3;border:1px solid #3a2f1c;border-radius:4px;padding:5px 7px;font-family:ui-monospace,monospace;font-size:11px}
+  .mjd-auth{display:flex;gap:7px;align-items:center;margin:0 2px 8px;padding:6px 8px;background:rgba(0,0,0,.28);border:1px solid rgba(230,211,163,.12);border-radius:4px;font-size:11px}
+  .mjd-adot{width:8px;height:8px;border-radius:50%;flex:none;background:#e0c14a}
+  .mjd-a-ok .mjd-adot{background:#6fd04a;box-shadow:0 0 5px #6fd04a}.mjd-a-ok{color:#9fe07f}
+  .mjd-a-wait{color:#e0c14a}
+  .mjd-a-bad .mjd-adot{background:#e0564a}.mjd-a-bad{color:#ff8a7a}
+  .mjd-atext{flex:1;min-width:0}.mjd-uid{color:#9d8f6d}
+  .mjd-retry{flex:none;width:24px;height:22px;padding:0;cursor:pointer;background:#0e0b07;color:#e6d3a3;border:1px solid #3a2f1c;border-radius:4px;font-size:13px;line-height:1;opacity:.7}
+  .mjd-retry:hover{opacity:1;border-color:#8a6d2f}
   .mjd-msg{margin:0 2px 8px;padding:7px 9px;border-radius:4px;background:rgba(90,20,20,.35);border:1px solid #6e2e2a;color:#ffbdb5;font-size:11px}
   .mjd-scroll,.mjd-scroll .mjd-list{max-height:340px}
   .mjd-scroll{position:relative}
@@ -261,6 +303,16 @@
     error: { c: 'error', t: 'Błąd' },
   };
 
+  const AUTH_TXT = {
+    checking: { c: 'wait', t: 'Sprawdzam konto Margonem…' },
+    ok: { c: 'ok', t: 'Dostęp potwierdzony' },
+    pending: { c: 'wait', t: 'Czeka na akceptację administratora' },
+    rejected: { c: 'bad', t: 'Dostęp nieprzyznany' },
+    revoked: { c: 'bad', t: 'Dostęp cofnięty' },
+    offline: { c: 'wait', t: 'Serwer niedostępny' },
+    error: { c: 'bad', t: 'Nie udało się potwierdzić konta' },
+  };
+
   const UI = {
     wnd: null, root: null, list: null, _t: null,
     open() {
@@ -271,7 +323,7 @@
         '<div class="graphic-background interface-element-middle-1-background"></div>' +
         '<div class="mjd-inner">' +
           '<h2><div class="interface-element-header-1-background-stretch"></div><span>Twoje dodatki</span></h2>' +
-          '<div class="mjd-keybar"><input type="password" class="mjd-key" placeholder="Klucz dostępu (MA-XXXX-XXXX-XXXX)" spellcheck="false" autocomplete="off" data-lpignore="true"><button type="button" class="mjd-eye" title="Pokaż / ukryj klucz" aria-label="Pokaż / ukryj klucz">&#128065;</button></div>' +
+          '<div class="mjd-auth"><span class="mjd-adot"></span><span class="mjd-atext"></span><button type="button" class="mjd-retry" title="Sprawdź dostęp ponownie">&#8635;</button></div>' +
           '<div class="mjd-msg" style="display:none"></div>' +
           '<div class="scroll-wrapper mjd-scroll"><div class="scroll-pane mjd-list"></div></div>' +
         '</div>' +
@@ -282,22 +334,7 @@
       bReload.addEventListener('click', () => location.reload());
       bottom.append(bReload);
 
-      const keyInput = root.querySelector('.mjd-key'); keyInput.value = accessKey;
-      const KEY_RE = /^MA-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
-      const maybeSave = force => {
-        const v = (keyInput.value || '').trim().toUpperCase();
-        if (v === accessKey) return;
-        if (force || KEY_RE.test(v)) this.saveKey();
-      };
-      keyInput.addEventListener('input', () => maybeSave(false));
-      keyInput.addEventListener('change', () => maybeSave(true));
-      keyInput.addEventListener('keydown', e => { if (e.key === 'Enter') maybeSave(true); });
-      const eye = root.querySelector('.mjd-eye');
-      eye.addEventListener('click', () => {
-        const show = keyInput.type === 'password';
-        keyInput.type = show ? 'text' : 'password';
-        eye.classList.toggle('on', show);
-      });
+      root.querySelector('.mjd-retry').addEventListener('click', () => { this.flash('Sprawdzam dostęp…'); syncWithServer(); });
 
       this.root = root; this.list = root.querySelector('.mjd-list'); this.scroll = root.querySelector('.mjd-scroll');
       this.wnd = E.windowManager.add({ content: $(root), nameWindow: 'MAJCINAI_ADDONS_MANAGER', title: 'Dodatki', onclose: () => this.wnd.hide() });
@@ -306,19 +343,21 @@
       this.refresh();
     },
     toTop() { try { this.wnd.setWndOnPeak(); } catch (e) {} },
-    saveKey() {
-      const v = (this.root.querySelector('.mjd-key').value || '').trim().toUpperCase();
-      accessKey = v; save(K.key, v); this.root.querySelector('.mjd-key').type = 'password'; this.root.querySelector('.mjd-eye').classList.remove('on'); this.flash(v ? 'Klucz zapisany – sprawdzam…' : 'Klucz usunięty');
-      syncWithServer();
-    },
     refresh() { if (!this.list) return; clearTimeout(this._t); this._t = setTimeout(() => this.render(), 30); },
     render() {
       const list = this.list; if (!list) return;
       const msg = this.root.querySelector('.mjd-msg');
       if (serverMsg) { msg.style.display = 'block'; msg.textContent = serverMsg; } else msg.style.display = 'none';
+      const A = AUTH_TXT[auth.state] || AUTH_TXT.error;
+      const bar = this.root.querySelector('.mjd-auth');
+      bar.className = 'mjd-auth mjd-a-' + A.c;
+      bar.querySelector('.mjd-atext').innerHTML = esc(A.t) + (auth.uid ? ' <span class="mjd-uid">· ID konta: ' + esc(auth.uid) + '</span>' : '');
       list.innerHTML = ''; let needReload = false;
-      if (!accessKey) { list.appendChild(el('div', 'mjd-empty', 'Wpisz klucz dostępu, aby zobaczyć swoje dodatki.')); this.root.classList.remove('need-reload'); this.updBar(); return; }
-      if (!cache.addons.length) { list.appendChild(el('div', 'mjd-empty', serverMsg ? 'Brak dostępnych dodatków.' : 'Ładowanie listy dodatków…')); this.root.classList.remove('need-reload'); this.updBar(); return; }
+      if (['pending', 'rejected', 'revoked'].includes(auth.state)) {
+        const hint = auth.state === 'pending' ? 'Przekaż administratorowi swoje ID konta: <b>' + esc(auth.uid) + '</b>. Po akceptacji kliknij &#8635; albo odśwież grę.' : 'Brak dostępu do dodatków.';
+        list.appendChild(el('div', 'mjd-empty', hint)); this.root.classList.remove('need-reload'); this.updBar(); return;
+      }
+      if (!cache.addons.length) { list.appendChild(el('div', 'mjd-empty', auth.state === 'checking' ? 'Sprawdzam dostęp…' : (auth.state === 'ok' ? 'Nie masz jeszcze przypisanych dodatków.' : 'Brak dostępnych dodatków.'))); this.root.classList.remove('need-reload'); this.updBar(); return; }
       for (const a of cache.addons) {
         const on = !!state.enabled[a.id], r = R(a.id);
         const ver = r.runningVersion || a.version || '';
