@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Margonem – Dodatki (menedżer)
 // @namespace    majcinai
-// @version      0.3.0
+// @version      0.3.1
 // @description  Menedżer dodatków Margonem: włączanie i wyłączanie dodatków z okna Konfiguracji w grze. Dostęp sprawdzany przez oficjalne logowanie Margonem (bez kluczy); dodatki pobierane z prywatnego serwera i aktualizowane same.
 // @author       majcinai
 // @homepageURL  https://github.com/majcinai/margo-addons
@@ -16,6 +16,7 @@
 // @grant        GM_listValues
 // @grant        GM_registerMenuCommand
 // @grant        unsafeWindow
+// @connect      margo-dodatki.majcin94.workers.dev
 // @connect      workers.dev
 // @connect      public-api.margonem.pl
 // @run-at       document-start
@@ -28,7 +29,7 @@
   if (W.top !== W.self) return;
   if (W.MargoAddons && W.MargoAddons.__manager) return;
 
-  const MANAGER_VERSION = '0.3.0';
+  const MANAGER_VERSION = '0.3.1';
 
   // ADRES SERWERA – ustaw po wdrożeniu (np. https://majcin-addons.twojanazwa.workers.dev)
   const SERVER_URL = 'https://margo-dodatki.majcin94.workers.dev';
