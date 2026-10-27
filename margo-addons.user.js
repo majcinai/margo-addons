@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Margonem – Dodatki (menedżer)
 // @namespace    majcinai
-// @version      0.3.1
+// @version      0.3.4
 // @description  Menedżer dodatków Margonem: włączanie i wyłączanie dodatków z okna Konfiguracji w grze. Dostęp sprawdzany przez oficjalne logowanie Margonem (bez kluczy); dodatki pobierane z prywatnego serwera i aktualizowane same.
 // @author       majcinai
 // @homepageURL  https://github.com/majcinai/margo-addons
@@ -29,7 +29,7 @@
   if (W.top !== W.self) return;
   if (W.MargoAddons && W.MargoAddons.__manager) return;
 
-  const MANAGER_VERSION = '0.3.1';
+  const MANAGER_VERSION = '0.3.4';
 
   // ADRES SERWERA – ustaw po wdrożeniu (np. https://majcin-addons.twojanazwa.workers.dev)
   const SERVER_URL = 'https://margo-dodatki.majcin94.workers.dev';
@@ -41,6 +41,7 @@
     state: 'mm.state',
     cache: 'mm.cache',
     userLabel: 'mm.userLabel',
+    widget: 'mm.widgetPos',
     data: (id, k) => 'a.' + id + '.' + k,
   };
   const load = (k, def) => { try { const v = GM_getValue(k); return v === undefined ? def : v; } catch (e) { return def; } };
@@ -113,7 +114,7 @@
     if (syncing) return; syncing = true;
     try { await doSync(); } finally { syncing = false; UI.refresh(); }
   }
-  function setAuth(st, msg, uid) { auth.state = st; auth.msg = msg || ''; if (uid != null && uid !== '') auth.uid = String(uid); serverMsg = (st === 'ok' || st === 'checking') ? null : (msg || null); UI.refresh(); }
+  function setAuth(st, msg, uid) { auth.state = st; auth.msg = msg || ''; if (uid != null && uid !== '') auth.uid = String(uid); serverMsg = (st === 'ok' || st === 'checking') ? null : (msg || null); UI.refresh(); Widget.update(); }
   function dropAccess() {
     // Brak dostępu: nie uruchamiaj już dodatków z pamięci przy kolejnym wejściu.
     for (const old of cache.addons) if (R(old.id).status === 'running') R(old.id).status = 'pendingOff';
@@ -285,12 +286,27 @@
   .mjd-s-error .mjd-dot{background:#e0564a}.mjd-s-error{color:#ff8a7a}
   .mjd-s-off{color:#8a7f66}
   .mjd-upd{color:#7fc8ff}
+  .mjd-search{position:relative;display:flex;align-items:center;margin:0 2px 8px}
+  .mjd-search .mjd-q{flex:1;min-width:0;background:#0e0b07;color:#e6d3a3;border:1px solid #3a2f1c;border-radius:4px;padding:5px 60px 5px 8px;font-size:12px;outline:none}
+  .mjd-search .mjd-q:focus{border-color:#8a6d2f}
+  .mjd-qx{position:absolute;right:38px;color:#9d8f6d;cursor:pointer;font-size:15px;line-height:1;padding:0 3px;display:none}
+  .mjd-search.has-q .mjd-qx{display:block}.mjd-qx:hover{color:#f0e0b0}
+  .mjd-qn{position:absolute;right:7px;color:#6f6450;font-size:10px;pointer-events:none}
   .mjd-empty{padding:20px;text-align:center;color:#9d8f6d}
   .mjd-bottom{position:absolute;left:0;right:0;bottom:6px;display:flex;justify-content:center;gap:8px;z-index:1}
   .mjd-bottom .button{position:relative}
   .mjd-reload{display:none}.mjd-wnd.need-reload .mjd-reload{display:block}
   .mjd-flash{position:absolute;left:0;right:0;bottom:40px;text-align:center;color:#9fe07f;font-size:11px;opacity:0;transition:opacity .3s;z-index:1;pointer-events:none}
   .mjd-flash.show{opacity:1}
+  .mjd-widget{position:fixed;z-index:450;left:0;top:0;display:flex;align-items:center;gap:5px;height:24px;padding:0 9px 0 7px;border-radius:12px;
+    background:linear-gradient(#2a2114,#140f09);border:1px solid #8a6d2f;box-shadow:0 2px 6px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,230,160,.15);
+    color:#e6d3a3;font:bold 12px/1 Arial,sans-serif;letter-spacing:.2px;cursor:pointer;user-select:none;touch-action:none;white-space:nowrap;opacity:.88;transition:opacity .15s,box-shadow .15s}
+  .mjd-widget:hover{opacity:1;box-shadow:0 2px 8px rgba(0,0,0,.7),0 0 6px rgba(230,196,100,.45)}
+  .mjd-widget.dragging{cursor:grabbing;opacity:1}
+  .mjd-widget .mjd-w-ai{color:#f2c94c;text-shadow:0 0 4px rgba(242,201,76,.55)}
+  .mjd-widget .mjd-w-dot{width:7px;height:7px;border-radius:50%;background:#e0c14a;flex:none}
+  .mjd-widget.w-ok .mjd-w-dot{background:#6fd04a;box-shadow:0 0 4px #6fd04a}
+  .mjd-widget.w-bad .mjd-w-dot{background:#e0564a}
   `;
   function addCss() { const s = document.createElement('style'); s.id = 'mjd-addons-css'; s.textContent = CSS; (document.head || document.documentElement).appendChild(s); }
 
@@ -315,10 +331,10 @@
   };
 
   const UI = {
-    wnd: null, root: null, list: null, _t: null,
+    wnd: null, root: null, list: null, _t: null, query: '',
     open() {
       const E = W.Engine, $ = W.$; if (!E || !E.windowManager || !$) return;
-      if (this.wnd) { this.wnd.show(); this.toTop(); this.refresh(); return; }
+      if (this.wnd) { this.wnd.show(); this.visible = true; this.toTop(); this.refresh(); return; }
       const root = el('div', 'mjd-wnd');
       root.innerHTML =
         '<div class="graphic-background interface-element-middle-1-background"></div>' +
@@ -326,6 +342,7 @@
           '<h2><div class="interface-element-header-1-background-stretch"></div><span>Twoje dodatki</span></h2>' +
           '<div class="mjd-auth"><span class="mjd-adot"></span><span class="mjd-atext"></span><button type="button" class="mjd-retry" title="Sprawdź dostęp ponownie">&#8635;</button></div>' +
           '<div class="mjd-msg" style="display:none"></div>' +
+          '<div class="mjd-search"><input type="text" class="mjd-q" placeholder="Szukaj dodatku…" spellcheck="false" autocomplete="off"><span class="mjd-qx" title="Wyczyść">&times;</span><span class="mjd-qn"></span></div>' +
           '<div class="scroll-wrapper mjd-scroll"><div class="scroll-pane mjd-list"></div></div>' +
         '</div>' +
         '<div class="mjd-flash"></div>' +
@@ -337,12 +354,19 @@
 
       root.querySelector('.mjd-retry').addEventListener('click', () => { this.flash('Sprawdzam dostęp…'); syncWithServer(); });
 
+      const q = root.querySelector('.mjd-q');
+      // Pisanie w wyszukiwarce nie może uruchamiać skrótów klawiszowych gry.
+      ['keydown', 'keyup', 'keypress'].forEach(t => q.addEventListener(t, ev => { ev.stopPropagation(); if (t === 'keydown' && ev.key === 'Escape') { q.value = ''; this.query = ''; this.render(); } }));
+      q.addEventListener('input', () => { this.query = q.value; this.render(); });
+      root.querySelector('.mjd-qx').addEventListener('click', () => { q.value = ''; this.query = ''; this.render(); q.focus(); });
       this.root = root; this.list = root.querySelector('.mjd-list'); this.scroll = root.querySelector('.mjd-scroll');
-      this.wnd = E.windowManager.add({ content: $(root), nameWindow: 'MAJCINAI_ADDONS_MANAGER', title: 'Dodatki', onclose: () => this.wnd.hide() });
+      this.wnd = E.windowManager.add({ content: $(root), nameWindow: 'MAJCINAI_ADDONS_MANAGER', title: 'Dodatki', onclose: () => { this.wnd.hide(); this.visible = false; } });
+      this.visible = true;
       this.wnd.addToAlertLayer(); this.wnd.center(); this.wnd.show(); this.toTop();
       try { $(this.scroll).addScrollBar({ track: true }); this.hasBar = true; } catch (e) { this.scroll.style.overflowY = 'auto'; this.list.style.overflowY = 'auto'; }
       this.refresh();
     },
+    toggle() { if (this.wnd && this.visible) { this.wnd.hide(); this.visible = false; } else this.open(); },
     toTop() { try { this.wnd.setWndOnPeak(); } catch (e) {} },
     refresh() { if (!this.list) return; clearTimeout(this._t); this._t = setTimeout(() => this.render(), 30); },
     render() {
@@ -354,12 +378,22 @@
       bar.className = 'mjd-auth mjd-a-' + A.c;
       bar.querySelector('.mjd-atext').innerHTML = esc(A.t) + (auth.uid ? ' <span class="mjd-uid">· ID konta: ' + esc(auth.uid) + '</span>' : '');
       list.innerHTML = ''; let needReload = false;
+      this.root.querySelector('.mjd-search').style.display = 'none';
       if (['pending', 'rejected', 'revoked'].includes(auth.state)) {
         const hint = auth.state === 'pending' ? 'Przekaż administratorowi swoje ID konta: <b>' + esc(auth.uid) + '</b>. Po akceptacji kliknij &#8635; albo odśwież grę.' : 'Brak dostępu do dodatków.';
         list.appendChild(el('div', 'mjd-empty', hint)); this.root.classList.remove('need-reload'); this.updBar(); return;
       }
       if (!cache.addons.length) { list.appendChild(el('div', 'mjd-empty', auth.state === 'checking' ? 'Sprawdzam dostęp…' : (auth.state === 'ok' ? 'Nie masz jeszcze przypisanych dodatków.' : 'Brak dostępnych dodatków.'))); this.root.classList.remove('need-reload'); this.updBar(); return; }
-      for (const a of cache.addons) {
+      for (const a of cache.addons) { const r = R(a.id); if (r.status === 'pendingOff' || r.updateReady) needReload = true; }
+      const norm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l');
+      const words = norm(this.query).split(/\s+/).filter(Boolean);
+      const shown = cache.addons.filter(a => { const hay = norm((a.name || a.id) + ' ' + (a.description || '')); return words.every(w => hay.includes(w)); });
+      const search = this.root.querySelector('.mjd-search');
+      search.style.display = '';
+      search.classList.toggle('has-q', !!words.length);
+      search.querySelector('.mjd-qn').textContent = words.length ? shown.length + '/' + cache.addons.length : cache.addons.length + '';
+      if (!shown.length) list.appendChild(el('div', 'mjd-empty', 'Brak dodatków pasujących do „' + esc(this.query.trim()) + '”.'));
+      for (const a of shown) {
         const on = !!state.enabled[a.id], r = R(a.id);
         const ver = r.runningVersion || a.version || '';
         const item = el('div', 'mjd-item' + (on ? ' on' : ''));
@@ -375,7 +409,6 @@
         st.innerHTML = '<span class="mjd-dot"></span><span>' + esc(s.t + (r.status === 'error' && r.error ? ': ' + r.error : '')) + '</span>';
         if (r.updateReady) st.innerHTML += '<span class="mjd-upd">• nowa wersja v' + esc(r.updateReady) + ' po odświeżeniu</span>';
         item.appendChild(st);
-        if (r.status === 'pendingOff' || r.updateReady) needReload = true;
         item.querySelector('input').addEventListener('change', e => setEnabled(a.id, e.target.checked));
         list.appendChild(item);
       }
@@ -395,12 +428,87 @@
     try { W.$(b).tip('Twoje dodatki'); } catch (e) {}
   }
 
+  /* --------------------------- pływający przycisk m(AI)cin --------------------------- */
+  const Widget = {
+    el: null,
+    area() {   // cały widoczny obszar przeglądarki – przycisk można postawić także poza grą
+      return { left: 0, top: 0, right: innerWidth, bottom: innerHeight, width: innerWidth, height: innerHeight };
+    },
+    defaultPos() {   // lewy górny róg mapy gry
+      const A = this.area(), c = document.querySelector('#GAME_CANVAS');
+      const r = c && c.getBoundingClientRect();
+      if (r && r.width > 50) return { x: Math.round(r.left - A.left + 8), y: Math.round(r.top - A.top + 8) };
+      return { x: 8, y: 8 };
+    },
+    fits(x, y) {
+      const A = this.area(), w = this.el.offsetWidth, h = this.el.offsetHeight;
+      return x >= 0 && y >= 0 && x + w <= A.width && y + h <= A.height;
+    },
+    place(pos, persist) {
+      const A = this.area();
+      if (!pos || !this.fits(pos.x, pos.y)) pos = this.defaultPos();
+      this.pos = pos;
+      this.el.style.left = Math.round(A.left + pos.x) + 'px';
+      this.el.style.top = Math.round(A.top + pos.y) + 'px';
+      if (persist) save(K.widget, pos);
+    },
+    update() {
+      if (!this.el) return;
+      const c = auth.state === 'ok' ? 'w-ok' : (['pending', 'checking', 'offline'].includes(auth.state) ? '' : 'w-bad');
+      this.el.className = 'mjd-widget' + (c ? ' ' + c : '') + (this.drag ? ' dragging' : '');
+    },
+    init() {
+      if (this.el) return;
+      const e = this.el = el('div', 'mjd-widget', '<span class="mjd-w-dot"></span><span>m<span class="mjd-w-ai">(AI)</span>cin</span>');
+      e.title = 'Dodatki – kliknij, aby otworzyć; przeciągnij, aby przesunąć; prawy klik – domyślne miejsce';
+      document.body.appendChild(e);
+      this.place(load(K.widget, null), false);
+      this.update();
+      let start = null;
+      const stop = ev => { ev.stopPropagation(); };
+      e.addEventListener('pointerdown', ev => {
+        if (ev.button !== 0) return;
+        stop(ev); ev.preventDefault();
+        start = { mx: ev.clientX, my: ev.clientY, x: this.pos.x, y: this.pos.y, moved: false };
+        try { e.setPointerCapture(ev.pointerId); } catch (er) {}
+      });
+      e.addEventListener('pointermove', ev => {
+        if (!start) return;
+        const dx = ev.clientX - start.mx, dy = ev.clientY - start.my;
+        if (!start.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+        if (!start.moved) { start.moved = true; this.drag = true; this.update(); }
+        const A = this.area();
+        const x = Math.max(0, Math.min(A.width - e.offsetWidth, start.x + dx));
+        const y = Math.max(0, Math.min(A.height - e.offsetHeight, start.y + dy));
+        this.pos = { x, y };
+        e.style.left = Math.round(A.left + x) + 'px'; e.style.top = Math.round(A.top + y) + 'px';
+      });
+      const end = ev => {
+        if (!start) return;
+        stop(ev);
+        const moved = start.moved; start = null; this.drag = false; this.update();
+        try { e.releasePointerCapture(ev.pointerId); } catch (er) {}
+        if (moved) save(K.widget, this.pos); else UI.toggle();
+      };
+      e.addEventListener('pointerup', end);
+      e.addEventListener('pointercancel', end);
+      ['mousedown', 'click', 'dblclick', 'contextmenu'].forEach(t => e.addEventListener(t, stop));
+      e.addEventListener('contextmenu', ev => { ev.preventDefault(); this.place(null, true); });   // prawy klik = powrót na domyślne miejsce
+      // Po zmianie rozmiaru okna: gdy przycisk wypada poza widoczny obszar – wróć do lewego górnego rogu gry.
+      let t = null;
+      addEventListener('resize', () => { clearTimeout(t); t = setTimeout(() => this.place(load(K.widget, null), false), 150); });
+    },
+  };
+
   function initUi() {
     addCss(); injectButton();
     let queued = false;
     new MutationObserver(() => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; injectButton(); }); })
       .observe(document.body, { childList: true, subtree: true });
     try { GM_registerMenuCommand('Otwórz menedżer dodatków', () => UI.open()); } catch (e) {}
+    try { GM_registerMenuCommand('Przywróć przycisk m(AI)cin na domyślne miejsce', () => { save(K.widget, null); Widget.place(null, true); }); } catch (e) {}
+    // Przycisk pojawia się, gdy interfejs gry jest gotowy.
+    waitFor(() => W.Engine && W.Engine.hero && document.querySelector('#GAME_CANVAS'), 60000).then(() => Widget.init());
   }
 
   /* --------------------------- start --------------------------- */
