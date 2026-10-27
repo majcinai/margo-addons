@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Margonem – Dodatki (menedżer)
 // @namespace    majcinai
-// @version      0.4.0
+// @version      0.4.1
 // @description  Menedżer dodatków Margonem: włączanie i wyłączanie dodatków z okna Konfiguracji w grze. Dostęp sprawdzany przez oficjalne logowanie Margonem (bez kluczy); dodatki pobierane z prywatnego serwera i aktualizowane same.
 // @author       majcinai
 // @homepageURL  https://github.com/majcinai/margo-addons
@@ -29,7 +29,7 @@
   if (W.top !== W.self) return;
   if (W.MargoAddons && W.MargoAddons.__manager) return;
 
-  const MANAGER_VERSION = '0.4.0';
+  const MANAGER_VERSION = '0.4.1';
 
   // ADRES SERWERA – ustaw po wdrożeniu (np. https://majcin-addons.twojanazwa.workers.dev)
   const SERVER_URL = 'https://margo-dodatki.majcin94.workers.dev';
@@ -54,6 +54,8 @@
   let serverMsg = null;
   // Stan logowania: checking | ok | pending | rejected | revoked | error | offline
   const auth = { state: 'checking', uid: '', msg: '' };
+  // Dodatki uruchamiają się WYŁĄCZNIE po udanej weryfikacji konta w tej sesji gry.
+  let verified = false;
 
   const rt = {};
   const R = id => (rt[id] = rt[id] || { status: 'off' });
@@ -114,7 +116,7 @@
     if (syncing) return; syncing = true;
     try { await doSync(); } finally { syncing = false; UI.refresh(); }
   }
-  function setAuth(st, msg, uid) { auth.state = st; auth.msg = msg || ''; if (uid != null && uid !== '') auth.uid = String(uid); serverMsg = (st === 'ok' || st === 'checking') ? null : (msg || null); UI.refresh(); Widget.update(); }
+  function setAuth(st, msg, uid) { if (st !== 'ok') verified = false; auth.state = st; auth.msg = msg || ''; if (uid != null && uid !== '') auth.uid = String(uid); serverMsg = (st === 'ok' || st === 'checking') ? null : (msg || null); UI.refresh(); Widget.update(); }
   function dropAccess() {
     // Brak dostępu: nie uruchamiaj już dodatków z pamięci przy kolejnym wejściu.
     for (const old of cache.addons) if (R(old.id).status === 'running') R(old.id).status = 'pendingOff';
@@ -125,14 +127,14 @@
     await waitFor(() => heroInfo().account);
     const hi = heroInfo();
     let ch;
-    try { ch = await post('/api/challenge', {}); } catch (e) { return setAuth('offline', 'Brak połączenia z serwerem dodatków – działają dodatki zapamiętane wcześniej.'); }
+    try { ch = await post('/api/challenge', {}); } catch (e) { return setAuth('offline', 'Brak połączenia z serwerem dodatków – dodatki uruchomią się po potwierdzeniu dostępu.'); }
     if (ch.status !== 200 || !ch.data.nonce) return setAuth('offline', 'Serwer dodatków nie odpowiada (' + ch.status + ').');
     const proof = await margonemProof(ch.data.nonce);
     if (!proof) return setAuth('error', 'Nie udało się potwierdzić konta w Margonem. Upewnij się, że jesteś zalogowany na margonem.pl, i odśwież grę.');
     auth.uid = String(proof.user_id);
     let res;
     try { res = await post('/api/login', { nonce: ch.data.nonce, proof, nick: hi.nick, world: worldName(), managerVersion: MANAGER_VERSION }); }
-    catch (e) { return setAuth('offline', 'Brak połączenia z serwerem dodatków – działają dodatki zapamiętane wcześniej.'); }
+    catch (e) { return setAuth('offline', 'Brak połączenia z serwerem dodatków – dodatki uruchomią się po potwierdzeniu dostępu.'); }
     const d = res.data || {};
     if (res.status === 403 && ['pending', 'rejected', 'revoked'].includes(d.error)) { dropAccess(); return setAuth(d.error, d.message, d.uid); }
     if (res.status !== 200 || !d.ok) return setAuth('error', d.message || ('Błąd serwera (' + res.status + ')'));
@@ -152,6 +154,7 @@
     for (const old of cache.addons) if (!incoming.find(a => a.id === old.id) && R(old.id).status === 'running') R(old.id).status = 'pendingOff';
     cache = { addons: incoming, at: Date.now() };
     save(K.cache, cache);
+    verified = true;
     setAuth('ok', '', d.uid);
     for (const a of incoming) if (state.enabled[a.id] && R(a.id).status === 'off') startAddon(a);
   }
@@ -223,6 +226,7 @@
   }
 
   async function startAddon(addon) {
+    if (!verified) return;                       // bez potwierdzonego dostępu nic nie startuje
     const r = R(addon.id);
     if (r.status === 'running' || r.status === 'loading') return;
     r.error = null;
@@ -241,6 +245,7 @@
   }
 
   function setEnabled(id, on) {
+    if (!verified) { UI.flash('Najpierw musi zostać potwierdzony dostęp.'); UI.refresh(); return; }
     const addon = cache.addons.find(a => a.id === id); if (!addon) return;
     state.enabled[id] = on; saveState();
     if (on) { const r = R(id); if (r.status === 'pendingOff') { r.status = 'running'; UI.refresh(); return; } startAddon(addon); }
@@ -386,8 +391,11 @@
       bar.querySelector('.mjd-atext').innerHTML = esc(A.t) + (auth.uid ? ' <span class="mjd-uid">· ID konta: ' + esc(auth.uid) + '</span>' : '');
       list.innerHTML = ''; let needReload = false;
       this.root.querySelector('.mjd-search').style.display = 'none';
-      if (['pending', 'rejected', 'revoked'].includes(auth.state)) {
-        const hint = auth.state === 'pending' ? 'Przekaż administratorowi swoje ID konta: <b>' + esc(auth.uid) + '</b>. Po akceptacji kliknij &#8635; albo odśwież grę.' : 'Brak dostępu do dodatków.';
+      if (auth.state !== 'ok') {
+        const hint = auth.state === 'pending' ? 'Przekaż administratorowi swoje ID konta: <b>' + esc(auth.uid) + '</b>. Po akceptacji kliknij &#8635; albo odśwież grę.'
+          : auth.state === 'checking' ? 'Sprawdzam dostęp…'
+          : (auth.state === 'offline' || auth.state === 'error') ? 'Dodatki są dostępne tylko po potwierdzeniu konta. Kliknij &#8635;, aby spróbować ponownie.'
+          : 'Brak dostępu do dodatków.';
         list.appendChild(el('div', 'mjd-empty', hint)); this.root.classList.remove('need-reload'); this.updBar(); return;
       }
       if (!cache.addons.length) { list.appendChild(el('div', 'mjd-empty', auth.state === 'checking' ? 'Sprawdzam dostęp…' : (auth.state === 'ok' ? 'Nie masz jeszcze przypisanych dodatków.' : 'Brak dostępnych dodatków.'))); this.root.classList.remove('need-reload'); this.updBar(); return; }
@@ -519,8 +527,6 @@
   }
 
   /* --------------------------- start --------------------------- */
-  for (const a of cache.addons) if (state.enabled[a.id]) startAddon(a);
-
   const onDom = () => { initUi(); syncWithServer(); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', onDom, { once: true }); else onDom();
 })();
