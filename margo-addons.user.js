@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Margonem – Dodatki (menedżer)
 // @namespace    majcinai
-// @version      0.3.4
+// @version      0.4.0
 // @description  Menedżer dodatków Margonem: włączanie i wyłączanie dodatków z okna Konfiguracji w grze. Dostęp sprawdzany przez oficjalne logowanie Margonem (bez kluczy); dodatki pobierane z prywatnego serwera i aktualizowane same.
 // @author       majcinai
 // @homepageURL  https://github.com/majcinai/margo-addons
@@ -29,7 +29,7 @@
   if (W.top !== W.self) return;
   if (W.MargoAddons && W.MargoAddons.__manager) return;
 
-  const MANAGER_VERSION = '0.3.4';
+  const MANAGER_VERSION = '0.4.0';
 
   // ADRES SERWERA – ustaw po wdrożeniu (np. https://majcin-addons.twojanazwa.workers.dev)
   const SERVER_URL = 'https://margo-dodatki.majcin94.workers.dev';
@@ -66,7 +66,7 @@
         method: 'POST', url: SERVER_URL.replace(/\/$/, '') + path,
         headers: { 'content-type': 'application/json' },
         data: JSON.stringify(payload), timeout: 15000,
-        onload: r => { let d = {}; try { d = JSON.parse(r.responseText); } catch (e) {} resolve({ status: r.status, data: d }); },
+        onload: r => { let d = {}; try { d = JSON.parse(r.responseText); } catch (e) {} resolve({ status: r.status, data: d, text: r.responseText }); },
         onerror: () => reject(new Error('błąd sieci')),
         ontimeout: () => reject(new Error('przekroczono czas')),
       });
@@ -137,10 +137,17 @@
     if (res.status === 403 && ['pending', 'rejected', 'revoked'].includes(d.error)) { dropAccess(); return setAuth(d.error, d.message, d.uid); }
     if (res.status !== 200 || !d.ok) return setAuth('error', d.message || ('Błąd serwera (' + res.status + ')'));
     save(K.userLabel, (d.player && d.player.label) || '');
-    const incoming = d.addons || [];
-    for (const a of incoming) {
-      const old = cache.addons.find(x => x.id === a.id);
-      if (old && bareCode(old.code) !== bareCode(a.code) && R(a.id).status === 'running') R(a.id).updateReady = a.version || '?';
+    // Serwer zwraca tylko opis i skrót (hash) kodu; kod pobieramy pojedynczo, tylko gdy się zmienił.
+    const incoming = [];
+    for (const m of d.addons || []) {
+      const old = cache.addons.find(x => x.id === m.id);
+      if (m.legacy) { if (old) incoming.push(old); continue; }          // serwer jeszcze przenosi ten dodatek – zostaw swoją kopię
+      if (old && old.hash && old.hash === m.hash && old.code) { incoming.push(Object.assign({}, old, m, { code: old.code })); continue; }
+      let code = null;
+      try { const r = await post('/api/code', { ticket: d.ticket, id: m.id }); if (r.status === 200 && r.text) code = r.text; } catch (e) {}
+      if (code == null) { if (old) incoming.push(old); continue; }       // nie udało się pobrać – użyj poprzedniej wersji
+      incoming.push(Object.assign({}, m, { code }));
+      if (old && R(m.id).status === 'running' && bareCode(old.code) !== bareCode(code)) R(m.id).updateReady = m.version || '?';
     }
     for (const old of cache.addons) if (!incoming.find(a => a.id === old.id) && R(old.id).status === 'running') R(old.id).status = 'pendingOff';
     cache = { addons: incoming, at: Date.now() };
