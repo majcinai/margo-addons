@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Margonem – Dodatki (menedżer)
 // @namespace    majcinai
-// @version      0.5.0
+// @version      0.5.1
 // @description  Menedżer dodatków Margonem: włączanie i wyłączanie dodatków z okna Konfiguracji w grze. Dostęp sprawdzany przez oficjalne logowanie Margonem (bez kluczy); dodatki pobierane z prywatnego serwera i aktualizowane same.
 // @author       majcinai
 // @homepageURL  https://github.com/majcinai/margo-addons
@@ -29,7 +29,7 @@
   if (W.top !== W.self) return;
   if (W.MargoAddons && W.MargoAddons.__manager) return;
 
-  const MANAGER_VERSION = '0.5.0';
+  const MANAGER_VERSION = '0.5.1';
 
   // ADRES SERWERA – ustaw po wdrożeniu (np. https://majcin-addons.twojanazwa.workers.dev)
   const SERVER_URL = 'https://margo-dodatki.majcin94.workers.dev';
@@ -186,7 +186,11 @@
       GM_listValues: () => GM_list().filter(k => k.startsWith(pre)).map(k => k.slice(pre.length)),
       GM_addStyle: css => { const s = document.createElement('style'); s.textContent = css; (document.head || document.documentElement).appendChild(s); return s; },
       GM_xmlhttpRequest: GM_xmlhttpRequest,
-      GM_registerMenuCommand: (n, f) => { try { GM_registerMenuCommand((addon.name || addon.id) + ': ' + n, f); } catch (e) {} },
+      GM_registerMenuCommand: (n, f) => {
+        // Polecenia menu trafiają też pod zębatkę dodatku w oknie „Dodatki”.
+        const r = R(addon.id); r.menu = (r.menu || []).filter(m => m.label !== String(n)); r.menu.push({ label: String(n), run: f }); UI.refresh();
+        try { GM_registerMenuCommand((addon.name || addon.id) + ': ' + n, f); } catch (e) {}
+      },
       GM_info: { script: { name: addon.name, version: meta.version }, scriptHandler: 'Margonem – Dodatki', version: MANAGER_VERSION },
       unsafeWindow: W,
     };
@@ -258,7 +262,12 @@
   /* --------------------------- API dla dodatków --------------------------- */
   W.MargoAddons = {
     __manager: true, version: MANAGER_VERSION,
-    register(id, opts) { const r = R(id); if (opts && typeof opts.stop === 'function') r.stop = opts.stop; },
+    // opts.stop – wyłączenie bez odświeżania gry; opts.settings – otwiera ustawienia dodatku (zębatka w oknie „Dodatki”).
+    register(id, opts) {
+      const r = R(id);
+      if (opts && typeof opts.stop === 'function') r.stop = opts.stop;
+      if (opts && typeof opts.settings === 'function') { r.settings = opts.settings; UI.refresh(); }
+    },
     isEnabled: id => !!state.enabled[id],
     open: () => UI.open(),
     _error: (id, e) => markError(id, e),
@@ -293,6 +302,8 @@
     package: '<path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
     trending: '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>',
     user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+    gear: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+    chevron: '<path d="m9 18 6-6-6-6"/>',
   };
   const ico = (n, s) => { s = s || 16; return '<svg class="mjd-i" width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (SVG[n] || SVG.puzzle) + '</svg>'; };
 
@@ -401,6 +412,16 @@
   #mjd-panel .mjd-s-loading,#mjd-panel .mjd-s-pending{color:var(--warn)}
   #mjd-panel .mjd-s-error{color:var(--bad)}
   #mjd-panel .mjd-s-update{color:var(--info)}
+  #mjd-panel .mjd-gear{width:28px;height:28px;color:var(--t3)}
+  #mjd-panel .mjd-gear:hover,#mjd-panel .mjd-gear.open{color:var(--gold);background:var(--el)}
+  #mjd-panel .mjd-gear .mjd-i{transition:transform .3s ease}
+  #mjd-panel .mjd-gear:hover .mjd-i{transform:rotate(45deg)}
+  #mjd-panel .mjd-gear-sp{width:28px;flex:none}
+  #mjd-panel .mjd-pop{position:absolute;z-index:3;min-width:220px;max-width:320px;padding:4px;background:var(--el);border:1px solid var(--bd2);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.5)}
+  #mjd-panel .mjd-pop-h{padding:6px 10px 4px;font-size:11px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #mjd-panel .mjd-pop button{display:flex;align-items:center;gap:8px;width:100%;min-height:30px;padding:6px 10px;border-radius:7px;text-align:left;font-size:12.5px;line-height:1.3;color:var(--t1)}
+  #mjd-panel .mjd-pop button:hover,#mjd-panel .mjd-pop button:focus-visible{background:var(--sf);color:var(--gold);outline:none}
+  #mjd-panel .mjd-pop button .mjd-i{color:var(--t3)}
   #mjd-panel .mjd-sw{position:relative;width:34px;height:20px;border-radius:999px;background:var(--el);border:1px solid var(--bd2);flex:none;transition:background .15s,border-color .15s}
   #mjd-panel .mjd-sw i{position:absolute;left:2px;top:2px;width:14px;height:14px;border-radius:50%;background:var(--t3);transition:transform .15s ease,background .15s}
   #mjd-panel .mjd-sw[aria-checked="true"]{background:rgba(242,201,76,.22);border-color:rgba(242,201,76,.45)}
@@ -476,6 +497,43 @@
     error: { c: 'bad', t: 'Nie udało się potwierdzić konta' },
   };
 
+  /* --- ustawienia dodatków: zębatka w wierszu ---
+   * Źródła (w tej kolejności): MargoAddons.register(id, { settings }), znane dodatki poniżej
+   * (otwierane przez ich własne API) oraz polecenia GM_registerMenuCommand dodatku.
+   * run() zwraca false, gdy ustawień nie da się teraz otworzyć. */
+  const clickEl = sel => { const e = document.querySelector(sel); if (!e) return false; e.click(); return true; };
+  const shown = e => !!(e && e.offsetParent);
+  const KNOWN_SETTINGS = {
+    'animacje-ulepszanie-i-doswiadczenie': { run: () => { if (!W.__mAnimFx || !W.__mAnimFx.openConfig) return false; W.__mAnimFx.openConfig(); } },
+    'konfiguracja-lupow-nowe-efekty-animacji': { run: () => { if (!W.lnfx || !W.lnfx.config) return false; W.lnfx.config(); } },
+    'minigry': { run: () => { const M = W.IceTowerMargo; if (!M || !M.open) return false; M.open(); setTimeout(() => { try { M.tab('set'); } catch (e) {} }, 60); } },
+    'ramki-kreator-ramek-przedmiotow': { run: () => {
+      if (!W.RamkiPlus || !W.RamkiPlus.open) return false;
+      W.RamkiPlus.open();
+      setTimeout(() => { const t = document.querySelector('.rkx .rkx-tab[data-t="settings"]'); if (t && !t.classList.contains('on')) t.click(); }, 60);
+    } },
+    'ulepszarka': { run: () => { if (!W.Ulepszarka || !W.Ulepszarka.config) return false; W.Ulepszarka.config(); } },
+    'szansa-na-lup': { run: () => { if (typeof W.lchSettings !== 'function') return false; W.lchSettings(); } },
+    'margomaps': { run: () => {
+      const open = () => shown(document.querySelector('.margomaps'));
+      if (!open() && !clickEl('#mnav2-btn')) return false;
+      setTimeout(() => { const s = document.querySelector('.margomaps .mnav2-settings'); if (s && !s.classList.contains('show')) clickEl('.margomaps [data-a="settings"]'); }, 120);
+    } },
+    'kolejka-na-tytana-dream': { fail: 'Najpierw otwórz okno „Kolejka tytana”, potem kliknij zębatkę.', run: () => {
+      const w = document.getElementById('tq-window'); const g = w && w.querySelector('.tq-gear');
+      if (!g || !shown(w)) return false;
+      if (!g.classList.contains('tq-on')) g.click();
+    } },
+  };
+  function settingsActions(a) {
+    const r = R(a.id), out = [];
+    if (r.status !== 'running') return out;
+    if (r.settings) out.push({ label: 'Ustawienia', run: r.settings });
+    else if (KNOWN_SETTINGS[a.id]) out.push({ label: 'Ustawienia', run: KNOWN_SETTINGS[a.id].run, fail: KNOWN_SETTINGS[a.id].fail });
+    for (const m of r.menu || []) out.push({ label: m.label, run: m.run, menu: true });
+    return out;
+  }
+
   function rowStatus(r) {
     if (r.status === 'error') return { c: 'error', t: r.error ? 'Błąd: ' + r.error : 'Błąd' };
     if (r.status === 'pendingOff') return { c: 'pending', t: 'Wyłączy się po odświeżeniu', tip: 'Dodatek wyłączy się po odświeżeniu gry' };
@@ -513,9 +571,11 @@
       // Klawisze i kliknięcia w panelu nie mogą trafiać do gry (skróty, ruch postaci).
       ['keydown', 'keyup', 'keypress'].forEach(t => root.addEventListener(t, ev => {
         ev.stopPropagation();
-        if (t === 'keydown' && ev.key === 'Escape') { ev.preventDefault(); if (this.q.value) this.setQuery(''); else this.hide(); }
+        if (t === 'keydown' && ev.key === 'Escape') { ev.preventDefault(); if (this.popId) this.closePop(true); else if (this.q.value) this.setQuery(''); else this.hide(); }
       }));
       ['mousedown', 'pointerdown', 'click', 'dblclick', 'contextmenu', 'wheel', 'touchstart'].forEach(t => root.addEventListener(t, ev => ev.stopPropagation(), { passive: true }));
+      // Kliknięcie poza menu zębatki zamyka je.
+      root.addEventListener('pointerdown', ev => { if (this.popId && !ev.target.closest('.mjd-pop, .mjd-gear')) this.closePop(); }, true);
 
       root.querySelector('.mjd-close').addEventListener('click', () => this.hide());
       root.querySelector('.mjd-retry').addEventListener('click', () => this.retry());
@@ -529,6 +589,8 @@
       this.list.addEventListener('click', ev => {
         const sw = ev.target.closest('.mjd-sw');
         if (sw) { const id = sw.closest('.mjd-row').dataset.id; setEnabled(id, !state.enabled[id]); return; }
+        const gear = ev.target.closest('.mjd-gear');
+        if (gear) { this.gearClick(gear.closest('.mjd-row').dataset.id, gear); return; }
         const act = ev.target.closest('[data-act]'); if (!act) return;
         if (act.dataset.act === 'retry') this.retry();
         else if (act.dataset.act === 'all') { this.cat = 'all'; this.render(); }
@@ -572,6 +634,7 @@
     },
     hide() {
       if (!this.root || !this.visible) return;
+      this.closePop();
       this.visible = false;
       const r = this.root; r.classList.remove('in');
       try { if (r.contains(document.activeElement)) document.activeElement.blur(); } catch (e) {}
@@ -584,6 +647,49 @@
       const done = () => this.flash('Skopiowano ID konta');
       try { W.navigator.clipboard.writeText(auth.uid).then(done, () => this.flash('Nie udało się skopiować – ID: ' + auth.uid)); }
       catch (e) { this.flash('ID konta: ' + auth.uid); }
+    },
+    /* --- zębatka: jedno działanie = od razu, kilka = małe menu --- */
+    gearClick(id, gear) {
+      const a = cache.addons.find(x => x.id === id); if (!a) return;
+      if (this.popId === id) { this.closePop(); return; }
+      const acts = settingsActions(a);
+      if (!acts.length) { this.render(); return; }
+      if (acts.length === 1) { this.runSetting(acts[0]); return; }
+      this.openPop(a, acts, gear);
+    },
+    openPop(a, acts, gear) {
+      this.closePop();
+      const pop = this.pop = el('div', 'mjd-pop');
+      pop.setAttribute('role', 'menu');
+      pop.innerHTML = '<div class="mjd-pop-h">' + esc(a.name || a.id) + '</div>' +
+        acts.map((x, i) => '<button type="button" role="menuitem" data-i="' + i + '">' + ico(x.menu ? 'chevron' : 'gear', 14) + '<span>' + esc(x.label) + '</span></button>').join('');
+      pop.addEventListener('click', ev => { const b = ev.target.closest('button[data-i]'); if (b) this.runSetting(acts[+b.dataset.i]); });
+      this.root.appendChild(pop);
+      this.popId = a.id; gear.classList.add('open'); gear.setAttribute('aria-expanded', 'true');
+      // pod zębatką, wyrównane do prawej; gdy brak miejsca na dole – nad nią
+      const pr = this.root.getBoundingClientRect(), gr = gear.getBoundingClientRect();
+      const left = Math.max(8, Math.min(gr.right - pr.left - pop.offsetWidth, pr.width - pop.offsetWidth - 8));
+      let top = gr.bottom - pr.top + 4;
+      if (top + pop.offsetHeight > pr.height - 8) top = gr.top - pr.top - pop.offsetHeight - 4;
+      pop.style.left = Math.round(left) + 'px'; pop.style.top = Math.round(Math.max(8, top)) + 'px';
+      const first = pop.querySelector('button'); if (first) try { first.focus({ preventScroll: true }); } catch (e) {}
+      if (!this._popScroll) { this._popScroll = true; this.list.addEventListener('scroll', () => { if (this.popId) this.closePop(); }, { passive: true }); }
+    },
+    closePop(focusGear) {
+      if (this.pop) { this.pop.remove(); this.pop = null; }
+      const id = this.popId; this.popId = null;
+      if (!this.list) return;
+      this.list.querySelectorAll('.mjd-gear.open').forEach(g => { g.classList.remove('open'); g.removeAttribute('aria-expanded'); });
+      if (focusGear && id) { const row = [...this.list.querySelectorAll('.mjd-row')].find(r => r.dataset.id === id); const g = row && row.querySelector('.mjd-gear'); if (g) try { g.focus(); } catch (e) {} }
+    },
+    // Okna ustawień dodatków są oknami gry – chowamy panel, żeby ich nie zasłaniał.
+    runSetting(act) {
+      this.closePop(); this.hide();
+      setTimeout(() => {
+        let ok;
+        try { ok = act.run(); } catch (e) { ok = false; console.error('[Dodatki] ustawienia:', e); }
+        if (ok === false) { this.open(); this.flash(act.fail || 'Ustawienia tego dodatku nie są teraz dostępne.'); }
+      }, 0);
     },
     refresh() { if (!this.root || !this.visible) return; clearTimeout(this._t); this._t = setTimeout(() => this.render(), 30); },
     stateHtml(kind, icon, title, desc, actions) {
@@ -616,6 +722,10 @@
           (a.description ? '<span class="mjd-desc">' + esc(a.description) + '</span>' : '') +
         '</div>' +
         (url ? '<a class="mjd-link" href="' + esc(url) + '" target="_blank" rel="noopener" title="Strona dodatku">' + ico('ext', 14) + '</a>' : '') +
+        (it.acts.length
+          ? '<button type="button" class="mjd-ib mjd-gear' + (this.popId === a.id ? ' open' : '') + '" title="Ustawienia dodatku" aria-label="' + esc('Ustawienia: ' + name) + '"' +
+            (it.acts.length > 1 ? ' aria-haspopup="menu"' : '') + '>' + ico('gear', 16) + '</button>'
+          : '<span class="mjd-gear-sp"></span>') +
         '<div class="mjd-st' + (st ? ' mjd-s-' + st.c : '') + '"' + (st ? ' title="' + esc(st.tip || st.t) + '"' : '') + '>' +
           (st ? '<span>' + esc(st.t) + '</span><i></i>' : '') + '</div>' +
         '<button type="button" class="mjd-sw" role="switch" aria-checked="' + on + '" aria-label="' + esc((on ? 'Wyłącz ' : 'Włącz ') + name) + '" title="' + (on ? 'Wyłącz' : 'Włącz') + '"><i></i></button>' +
@@ -629,7 +739,7 @@
       root.classList.toggle('checking', auth.state === 'checking');
 
       if (auth.state !== 'ok' || !cache.addons.length) {
-        root.classList.add('locked'); root.classList.remove('need-reload');
+        root.classList.add('locked'); root.classList.remove('need-reload'); this.closePop();
         this.side.innerHTML = '';
         this.list.innerHTML = auth.state !== 'ok' ? this.lockedHtml()
           : this.stateHtml('', 'inbox', 'Nie masz jeszcze przypisanych dodatków', 'Gdy administrator przypisze Ci dodatki, pojawią się tutaj.', '');
@@ -642,7 +752,8 @@
       root.classList.toggle('need-reload', needReload);
 
       const words = norm(this.query).split(/\s+/).filter(Boolean);
-      const items = cache.addons.map(a => ({ a, c: catOf(a), on: !!state.enabled[a.id] }));
+      const items = cache.addons.map(a => ({ a, c: catOf(a), on: !!state.enabled[a.id], acts: settingsActions(a) }));
+      if (this.popId && !items.some(it => it.a.id === this.popId && it.acts.length)) this.closePop();
       const matched = items.filter(it => {
         const hay = norm((it.a.name || it.a.id) + ' ' + (it.a.description || '') + ' ' + it.c.label);
         return words.every(w => hay.includes(w));
